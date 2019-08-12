@@ -457,3 +457,207 @@ class ICoreSouthBoundInterface(Interface):
         :param packet: The actual packet
          :return: None
         """
+
+class IInterAdapterInterface(Interface):
+    """
+    A Voltha adapter just for interadapter messaging.  This interface is to present the kafka interface for a minimal adapter that is subordinate to the main one. 
+    """
+    
+    def process_inter_adapter_message(msg):
+        """
+        Called when the adapter receives a message that was sent to it directly
+        from another adapter. An adapter is automatically registered for these
+        messages when creating the inter-container kafka proxy. Note that it is
+        the responsibility of the sending and receiving adapters to properly encode
+        and decode the message.
+        :param msg: Proto Message (any)
+        :return: Proto Message Response
+        """
+
+
+class ICoreSouthBoundInterface(Interface):
+    """
+    Represents a Voltha Core. This is used by an adapter to initiate async
+    calls towards Voltha Core.
+    """
+
+    def get_device(device_id):
+        """
+        Retrieve a device using its ID.
+        :param device_id: a device ID
+        :return: Device Object or None
+        """
+
+    def get_child_device(parent_device_id, **kwargs):
+        """
+        Retrieve a child device object belonging to the specified parent
+        device based on some match criteria. The first child device that
+        matches the provided criteria is returned.
+        :param parent_device_id: parent's device protobuf ID
+        :param **kwargs: arbitrary list of match criteria where the Value
+        in each key-value pair must be a protobuf type
+        :return: Child Device Object or None
+        """
+
+    def get_ports(device_id, port_type):
+        """
+        Retrieve all the ports of a given type of a Device.
+        :param device_id: a device ID
+        :param port_type: type of port
+        :return Ports object
+        """
+
+    def get_child_devices(parent_device_id):
+        """
+        Get all child devices given a parent device id
+        :param parent_device_id: The parent device ID
+        :return: Devices object
+        """
+
+    def get_child_device_with_proxy_address(proxy_address):
+        """
+        Get a child device based on its proxy address. Proxy address is
+        defined as {parent id, channel_id}
+        :param proxy_address: A Device.ProxyAddress object
+        :return: Device object or None
+        """
+
+    def device_state_update(device_id,
+                            oper_status=None,
+                            connect_status=None):
+        """
+        Update a device state.
+        :param device_id: The device ID
+        :param oper_state: Operational state of device
+        :param conn_state: Connection state of device
+        :return: None
+        """
+
+    def child_device_detected(parent_device_id,
+                              parent_port_no,
+                              child_device_type,
+                              channel_id,
+                              **kw):
+        """
+        A child device has been detected.  Core will create the device along
+        with its unique ID.
+        :param parent_device_id: The parent device ID
+        :param parent_port_no: The parent port number
+        :param device_type: The child device type
+        :param channel_id: A unique identifier for that child device within
+        the parent device (e.g. vlan_id)
+        :param kw: A list of key-value pair where the value is a protobuf
+        message
+        :return: None
+        """
+
+    def device_update(device):
+        """
+        Event corresponding to a device update.
+        :param device: Device Object
+        :return: None
+        """
+
+    def child_device_removed(parent_device_id, child_device_id):
+        """
+        Event indicating a child device has been removed from a parent.
+        :param parent_device_id: Device ID of the parent
+        :param child_device_id: Device ID of the child
+        :return: None
+        """
+
+    def child_devices_state_update(parent_device_id,
+                                   oper_status=None,
+                                   connect_status=None,
+                                   admin_status=None):
+        """
+        Event indicating the status of all child devices have been changed.
+        :param parent_device_id: Device ID of the parent
+        :param oper_status: Operational status
+        :param connect_status: Connection status
+        :param admin_status: Admin status
+        :return: None
+        """
+
+    def child_devices_removed(parent_device_id):
+        """
+        Event indicating all child devices have been removed from a parent.
+        :param parent_device_id: Device ID of the parent device
+        :return: None
+        """
+
+    def device_pm_config_update(device_pm_config, init=False):
+        """
+        Event corresponding to a PM config update of a device.
+        :param device_pm_config: a PmConfigs object
+        :param init: True indicates initializing stage
+        :return: None
+        """
+
+    def port_created(device_id, port):
+        """
+        A port has been created and needs to be added to a device.
+        :param device_id: a device ID
+        :param port: Port object
+        :return None
+        """
+
+    def port_removed(device_id, port):
+        """
+        A port has been removed and it needs to be removed from a Device.
+        :param device_id: a device ID
+        :param port: a Port object
+        :return None
+        """
+
+    def ports_enabled(device_id):
+        """
+        All ports on that device have been re-enabled. The Core will change
+        the admin state to ENABLED and operational state to ACTIVE for all
+        ports on that device.
+        :param device_id: a device ID
+        :return: None
+        """
+
+    def ports_disabled(device_id):
+        """
+        All ports on that device have been disabled. The Core will change the
+        admin status to DISABLED and operational state to UNKNOWN for all
+        ports on that device.
+        :param device_id: a device ID
+        :return: None
+        """
+
+    def ports_oper_status_update(device_id, oper_status):
+        """
+        The operational status of all ports of a Device has been changed.
+        The Core will update the operational status for all ports on the
+        device.
+        :param device_id: a device ID
+        :param oper_status: operational Status
+        :return None
+        """
+
+    def image_download_update(img_dnld):
+        """
+        Event corresponding to an image download update.
+        :param img_dnld: a ImageDownload object
+        :return: None
+        """
+
+    def image_download_deleted(img_dnld):
+        """
+        Event corresponding to the deletion of a downloaded image. The
+        references of this image needs to be removed from the Core.
+        :param img_dnld: a ImageDownload object
+        :return: None
+        """
+
+    def packet_in(device_id, egress_port_no, packet):
+        """
+        Sends a packet to the SDN controller via voltha Core
+        :param device_id: The OLT device ID
+        :param egress_port_no: The port number representing the ONU (cvid)
+        :param packet: The actual packet
+         :return: None
+        """

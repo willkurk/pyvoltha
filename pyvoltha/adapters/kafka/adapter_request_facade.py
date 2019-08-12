@@ -24,7 +24,7 @@ from zope.interface import implementer
 from twisted.internet import reactor
 
 from afkak.consumer import OFFSET_LATEST, OFFSET_EARLIEST
-from pyvoltha.adapters.interface import IAdapterInterface
+from pyvoltha.adapters.interface import IAdapterInterface, IInterAdapterInterface
 from voltha_protos.inter_container_pb2 import IntType, InterAdapterMessage, StrType, Error, ErrorCode
 from voltha_protos.device_pb2 import Device, ImageDownload, SimulateAlarmRequest
 from voltha_protos.openflow_13_pb2 import FlowChanges, FlowGroups, Flows, \
@@ -306,17 +306,6 @@ class AdapterRequestFacade(object):
     def unsuppress_alarm(self, filter, **kwargs):
         return self.adapter.unsuppress_alarm(filter)
 
-    def process_inter_adapter_message(self, msg, **kwargs):
-        m = InterAdapterMessage()
-        if msg:
-            msg.Unpack(m)
-        else:
-            return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="msg-invalid")
-
-        return (True, self.adapter.process_inter_adapter_message(m))
-
-
     def receive_packet_out(self, deviceId, outPort, packet, **kwargs):
         try:
             d_id = StrType()
@@ -359,4 +348,39 @@ class AdapterRequestFacade(object):
                                 reason="simulate-alarm-request-invalid")
 
         return True, self.adapter.simulate_alarm(d, req) 
+
+@implementer(IInterAdapterInterface)
+class InterAdapterRequestFacade(object):
+    """
+    Gate-keeper between CORE and device adapters.
+
+    On one side it interacts with Core's internal model and update/dispatch
+    mechanisms.
+
+    On the other side, it interacts with the adapters standard interface as
+    defined in
+    """
+
+    def __init__(self, adapter, core_proxy):
+        self.adapter = adapter
+        self.core_proxy = core_proxy
+
+    @inlineCallbacks
+    def start(self):
+        log.debug('starting')
+
+    @inlineCallbacks
+    def stop(self):
+        log.debug('stopping')
+    
+    def process_inter_adapter_message(self, msg, **kwargs):
+        m = InterAdapterMessage()
+        if msg:
+            msg.Unpack(m)
+        else:
+            return False, Error(code=ErrorCode.INVALID_PARAMETERS,
+                                reason="msg-invalid")
+
+        return (True, self.adapter.process_inter_adapter_message(m))
+
 

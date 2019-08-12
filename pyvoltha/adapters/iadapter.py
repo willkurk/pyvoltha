@@ -203,9 +203,6 @@ class IAdapter(object):
         if handler:
             reactor.callLater(0, handler.update_pm_config, device, pm_config)
 
-    def process_inter_adapter_message(self, msg):
-        raise NotImplementedError()
-
     def receive_packet_out(self, device_id, egress_port_no, msg):
         raise NotImplementedError()
 

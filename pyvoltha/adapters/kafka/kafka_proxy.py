@@ -25,7 +25,7 @@ from zope.interface import implementer
 from pyvoltha.common.utils.consulhelpers import get_endpoint_from_consul
 from event_bus_publisher import EventBusPublisher
 from pyvoltha.common.utils.registry import IComponent
-from confluent_kafka import Consumer, KafkaError
+import confluent_kafka
 import threading
 
 log = get_logger()
@@ -215,7 +215,7 @@ class KafkaProxy(object):
                 return
 
             # Create consumer for that topic
-            c = Consumer({
+            c = confluent_kafka.Consumer({
                 'bootstrap.servers': self.kafka_endpoint,
                 'group.id': groupId,
                 'auto.offset.reset': offset

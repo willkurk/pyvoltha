@@ -458,22 +458,20 @@ class IKafkaMessagingProxy(object):
                 else:
                     log.debug("unsupported-msg", msg_type=type(message.body))
                     return
-                if targetted_topic in self.topic_target_cls_map:
+                if targetted_topic in self.topic_target_cls_map and self._to_string(msg_body.rpc) in dir(self.topic_target_cls_map[targetted_topic]):
                     # Augment the request arguments with the from_topic
                     augmented_args = _augment_args_with_FromTopic(msg_body.args,
                                                         msg_body.reply_to_topic)
+                    call = getattr(
+                            self.topic_target_cls_map[targetted_topic],
+                            self._to_string(msg_body.rpc))
                     if augmented_args:
                         log.debug("message-body-args-present", body=msg_body)
-                        (status, res) = yield getattr(
-                            self.topic_target_cls_map[targetted_topic],
-                            self._to_string(msg_body.rpc))(
-                            **_toDict(augmented_args))
+                        (status, res) = yield call(**_toDict(augmented_args))
                     else:
                         log.debug("message-body-args-absent", body=msg_body,
                                   rpc=msg_body.rpc)
-                        (status, res) = yield getattr(
-                            self.topic_target_cls_map[targetted_topic],
-                            self._to_string(msg_body.rpc))()
+                        (status, res) = yield call()
                     if msg_body.response_required:
                         response = self._format_response(
                             msg_header=message.header,
