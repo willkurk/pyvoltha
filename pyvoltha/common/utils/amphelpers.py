@@ -183,6 +183,14 @@ class OMCIDevice(child.AMPChild):
 #        millis = int(round(time.time() * 1000))
 #        self.log.debug("started-process-message", millis=millis)
 #        return {"success": 1}
+    def get_ofp_port_info(self, device, port_no):
+        try:
+            if device.id == self.device.id:
+                ofp_port_info = self.handler.get_ofp_port_info(device, port_no)
+                log.debug('get_ofp_port_info', device_id=device.id, ofp_port_info=ofp_port_info)
+                return ofp_port_info
+        except Exception as err:
+            self.log.error("Exception:", err=err)
 
     def process_inter_adapter_message(self, msg):
         try:
@@ -198,4 +206,20 @@ class OMCIDevice(child.AMPChild):
                     self.handler.process_inter_adapter_message(msg)
         except Exception as err:
             self.log.error("Exception:", err=err)
+
+    def update_flows_bulk(self, device, flows, groups):
+        '''
+        log.info('bulk-flow-update', device_id=device.id,
+                  flows=flows, groups=groups)
+        '''
+        try:
+            assert len(groups.items) == 0
+            if device.id == self.device.id:
+                return self.handler.update_flow_table(device, flows.items)
+        except Exception as err:
+            self.log.error("Exception:", err=err)
+
+    def update_flows_incrementally(self, device, flow_changes, group_changes):
+        raise NotImplementedError()
+
 

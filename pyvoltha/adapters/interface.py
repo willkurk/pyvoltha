@@ -184,28 +184,6 @@ class IAdapterInterface(Interface):
         additional details.
         """
 
-    def update_flows_bulk(device, flows, groups):
-        """
-        Called after any flow table change, but only if the device supports
-        bulk mode, which is expressed by the 'accepts_bulk_flow_update'
-        capability attribute of the device type.
-        :param device: A Voltha.Device object.
-        :param flows: An openflow_v13.Flows object
-        :param groups: An  openflow_v13.Flows object
-        :return: (Deferred or None)
-        """
-
-    def update_flows_incrementally(device, flow_changes, group_changes):
-        """
-        Called after a flow table update, but only if the device supports
-        non-bulk mode, which is expressed by the 'accepts_add_remove_flow_updates'
-        capability attribute of the device type.
-        :param device: A Voltha.Device object.
-        :param flow_changes: An openflow_v13.FlowChanges object
-        :param group_changes: An openflow_v13.FlowGroupChanges object
-        :return: (Deferred or None)
-        """
-
     def update_pm_config(device, pm_configs):
         """
         Called every time a request is made to change pm collection behavior
@@ -245,17 +223,6 @@ class IAdapterInterface(Interface):
         definition gets created. This API will allow the Core to create a
         LogicalDevice associated with this device (OLT only).
         :param device: device
-        :return: Proto Message (TBD)
-        """
-
-    def get_ofp_port_info(device, port_no):
-        """
-        Retrieve the port info. This includes the ofp_port. The existing ofp
-        structure can be used, or all the attributes get added to the Port
-        definitions or a new proto definition gets created.  This API will allow
-        the Core to create a LogicalPort associated with this device.
-        :param device: device
-        :param port_no: port number
         :return: Proto Message (TBD)
         """
 
@@ -462,7 +429,18 @@ class IInterAdapterInterface(Interface):
     """
     A Voltha adapter just for interadapter messaging.  This interface is to present the kafka interface for a minimal adapter that is subordinate to the main one. 
     """
-    
+   
+    def get_ofp_port_info(device, port_no):
+        """
+        Retrieve the port info. This includes the ofp_port. The existing ofp
+        structure can be used, or all the attributes get added to the Port
+        definitions or a new proto definition gets created.  This API will allow
+        the Core to create a LogicalPort associated with this device.
+        :param device: device
+        :param port_no: port number
+        :return: Proto Message (TBD)
+        """
+
     def process_inter_adapter_message(msg):
         """
         Called when the adapter receives a message that was sent to it directly
@@ -473,6 +451,29 @@ class IInterAdapterInterface(Interface):
         :param msg: Proto Message (any)
         :return: Proto Message Response
         """
+    def update_flows_bulk(device, flows, groups):
+        """
+        Called after any flow table change, but only if the device supports
+        bulk mode, which is expressed by the 'accepts_bulk_flow_update'
+        capability attribute of the device type.
+        :param device: A Voltha.Device object.
+        :param flows: An openflow_v13.Flows object
+        :param groups: An  openflow_v13.Flows object
+        :return: (Deferred or None)
+        """
+
+    def update_flows_incrementally(device, flow_changes, group_changes):
+        """
+        Called after a flow table update, but only if the device supports
+        non-bulk mode, which is expressed by the 'accepts_add_remove_flow_updates'
+        capability attribute of the device type.
+        :param device: A Voltha.Device object.
+        :param flow_changes: An openflow_v13.FlowChanges object
+        :param group_changes: An openflow_v13.FlowGroupChanges object
+        :return: (Deferred or None)
+        """
+
+ 
 
 
 class ICoreSouthBoundInterface(Interface):

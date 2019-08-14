@@ -114,22 +114,6 @@ class AdapterRequestFacade(object):
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
                                 reason="device-invalid")
 
-    def get_ofp_port_info(self, device, port_no, **kwargs):
-        d = Device()
-        if device:
-            device.Unpack(d)
-        else:
-            return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid")
-        p = IntType()
-        if port_no:
-            port_no.Unpack(p)
-        else:
-            return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="port-no-invalid")
-
-        return True, self.adapter.get_ofp_port_info(d, p.val)
-
     def reconcile_device(self, device, **kwargs):
         return self.adapter.reconcile_device(device)
 
@@ -268,40 +252,6 @@ class AdapterRequestFacade(object):
     def get_device_details(self, device, **kwargs):
         return self.adapter.get_device_details(device)
 
-    def update_flows_bulk(self, device, flows, groups, **kwargs):
-        d = Device()
-        if device:
-            device.Unpack(d)
-        else:
-            return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid")
-        f = Flows()
-        if flows:
-            flows.Unpack(f)
-
-        g = FlowGroups()
-        if groups:
-            groups.Unpack(g)
-
-        return (True, self.adapter.update_flows_bulk(d, f, g))
-
-    def update_flows_incrementally(self, device, flow_changes, group_changes, **kwargs):
-        d = Device()
-        if device:
-            device.Unpack(d)
-        else:
-            return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid")
-        f = FlowChanges()
-        if flow_changes:
-            flow_changes.Unpack(f)
-
-        g = FlowGroupChanges()
-        if group_changes:
-            group_changes.Unpack(g)
-
-        return (True, self.adapter.update_flows_incrementally(d, f, g))
-
     def suppress_alarm(self, filter, **kwargs):
         return self.adapter.suppress_alarm(filter)
 
@@ -384,5 +334,56 @@ class InterAdapterRequestFacade(object):
                                 reason="msg-invalid")
 
         return (True, self.adapter.process_inter_adapter_message(m))
+
+    def get_ofp_port_info(self, device, port_no, **kwargs):
+        d = Device()
+        if device:
+            device.Unpack(d)
+        else:
+            return False, Error(code=ErrorCode.INVALID_PARAMETERS,
+                                reason="device-invalid")
+        p = IntType()
+        if port_no:
+            port_no.Unpack(p)
+        else:
+            return False, Error(code=ErrorCode.INVALID_PARAMETERS,
+                                reason="port-no-invalid")
+
+        return True, self.adapter.get_ofp_port_info(d, p.val)
+
+    def update_flows_bulk(self, device, flows, groups, **kwargs):
+        d = Device()
+        if device:
+            device.Unpack(d)
+        else:
+            return False, Error(code=ErrorCode.INVALID_PARAMETERS,
+                                reason="device-invalid")
+        f = Flows()
+        if flows:
+            flows.Unpack(f)
+
+        g = FlowGroups()
+        if groups:
+            groups.Unpack(g)
+
+        return (True, self.adapter.update_flows_bulk(d, f, g))
+
+    def update_flows_incrementally(self, device, flow_changes, group_changes, **kwargs):
+        d = Device()
+        if device:
+            device.Unpack(d)
+        else:
+            return False, Error(code=ErrorCode.INVALID_PARAMETERS,
+                                reason="device-invalid")
+        f = FlowChanges()
+        if flow_changes:
+            flow_changes.Unpack(f)
+
+        g = FlowGroupChanges()
+        if group_changes:
+            group_changes.Unpack(g)
+
+        return (True, self.adapter.update_flows_incrementally(d, f, g))
+
 
 
