@@ -25,12 +25,12 @@ from twisted.internet import reactor
 
 from afkak.consumer import OFFSET_LATEST, OFFSET_EARLIEST
 from pyvoltha.adapters.interface import IAdapterInterface, IInterAdapterInterface
-from voltha_protos.inter_container_pb2 import IntType, InterAdapterMessage, StrType, Error, ErrorCode
+from voltha_protos.inter_container_pb2 import IntType, InterAdapterMessage, StrType, IntType, Error, ErrorCode
 from voltha_protos.device_pb2 import Device, ImageDownload, SimulateAlarmRequest
 from voltha_protos.openflow_13_pb2 import FlowChanges, FlowGroups, Flows, \
     FlowGroupChanges, ofp_packet_out
 from pyvoltha.adapters.kafka.kafka_inter_container_library import IKafkaMessagingProxy, \
-    get_messaging_proxy, KAFKA_OFFSET_LATEST, KAFKA_OFFSET_EARLIEST, ARG_FROM_TOPIC
+    get_messaging_proxy, KAFKA_OFFSET_LATEST, KAFKA_OFFSET_EARLIEST, ARG_FROM_TOPIC, ARG_OFFSET
 
 log = structlog.get_logger()
 
@@ -90,12 +90,14 @@ class AdapterRequestFacade(object):
                 # Update the core reference for that device
                 self.core_proxy.update_device_core_reference(d.id, t.val)
 
+            offset = IntType()
+            kwargs[ARG_OFFSET].Unpack(offset)
             # # Start the creation of a device specific topic to handle all
             # # subsequent requests from the Core. This adapter instance will
             # # handle all requests for that device.
             # reactor.callLater(0, self.createKafkaDeviceTopic, d.id)
 
-            result = self.adapter.adopt_device(d)
+            result = self.adapter.adopt_device(d, offset.val)
             # return True, self.adapter.adopt_device(d)
 
             return True, result

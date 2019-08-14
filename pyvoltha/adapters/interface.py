@@ -46,7 +46,7 @@ class IAdapterInterface(Interface):
         :return: Deferred or direct return with voltha.HealthStatus message
         """
 
-    def adopt_device(device):
+    def adopt_device(device, offset):
         """
         Make sure the adapter looks after given device. Called when a device
         is provisioned top-down and needs to be activated by the adapter.

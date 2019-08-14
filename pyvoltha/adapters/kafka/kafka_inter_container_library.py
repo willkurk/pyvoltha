@@ -28,13 +28,14 @@ from pyvoltha.common.utils.registry import IComponent
 from kafka_proxy import KafkaProxy, get_kafka_proxy
 from voltha_protos.inter_container_pb2 import MessageType, Argument, \
     InterContainerRequestBody, InterContainerMessage, Header, \
-    InterContainerResponseBody, StrType
+    InterContainerResponseBody, StrType, IntType
 
 log = structlog.get_logger()
 
 KAFKA_OFFSET_LATEST = 'latest'
 KAFKA_OFFSET_EARLIEST = 'earliest'
 ARG_FROM_TOPIC = 'fromTopic'
+ARG_OFFSET = 'offset'
 
 
 class KafkaMessagingError(Exception):
@@ -51,7 +52,9 @@ class IKafkaMessagingProxy(object):
                  kv_store,
                  default_topic,
                  group_id_prefix,
-                 target_cls):
+                 target_cls,
+                 offset=None,
+                 manual_offset=None):
         """
         Initialize the kafka proxy.  This is a singleton (may change to
         non-singleton if performance is better)
@@ -79,6 +82,12 @@ class IKafkaMessagingProxy(object):
         self.transaction_id_deferred_map = {}
         self.received_msg_queue = DeferredQueue()
         self.stopped = False
+        if offset == None:
+            self.offset = KAFKA_OFFSET_LATEST
+        else:
+            self.offset = offset
+        self.manual_offset = manual_offset
+
 
         self.init_time = 0
         self.init_received_time = 0
@@ -115,7 +124,9 @@ class IKafkaMessagingProxy(object):
             reactor.callLater(0, self.subscribe,
                               topic=self.default_topic,
                               target_cls=self.target_cls,
-                              group_id=self.default_group_id)
+                              group_id=self.default_group_id,
+                              offset=self.offset,
+                              manual_offset=self.manual_offset)
 
             # Setup the singleton instance
             IKafkaMessagingProxy._kafka_messaging_instance = self
@@ -145,13 +156,13 @@ class IKafkaMessagingProxy(object):
         return self.default_topic
 
     @inlineCallbacks
-    def _subscribe_group_consumer(self, group_id, topic, offset, callback=None,
+    def _subscribe_group_consumer(self, group_id, topic, offset, manual_offset=None, callback=None,
                                   target_cls=None):
         try:
             log.debug("subscribing-to-topic-start", topic=topic)
             yield self.kafka_proxy.subscribe(topic,
                                              self._enqueue_received_group_message,
-                                             group_id, offset)
+                                             group_id, offset, manual_offset=manual_offset)
 
             if target_cls is not None and callback is None:
                 # Scenario #1
@@ -175,7 +186,7 @@ class IKafkaMessagingProxy(object):
 
     @inlineCallbacks
     def subscribe(self, topic, callback=None, target_cls=None,
-                  max_retry=3, group_id=None, offset=KAFKA_OFFSET_LATEST):
+                  max_retry=3, group_id=None, offset=KAFKA_OFFSET_LATEST, manual_offset=None):
         """
         Scenario 1:  invoked to subscribe to a specific topic with a
         target_cls to invoke when a message is received on that topic.  This
@@ -219,7 +230,8 @@ class IKafkaMessagingProxy(object):
             subscribed = yield self._subscribe_group_consumer(group_id, topic,
                                                               callback=callback,
                                                               target_cls=target_cls,
-                                                              offset=offset)
+                                                              offset=offset,
+                                                              manual_offset=manual_offset)
             if subscribed:
                 returnValue(True)
             elif retry > max_retry:
@@ -407,11 +419,14 @@ class IKafkaMessagingProxy(object):
         from Kafka.
         """
 
-        def _augment_args_with_FromTopic(args, from_topic):
+        def _augment_args_with_FromTopic(args, from_topic, offset):
             arg = Argument(key=ARG_FROM_TOPIC)
             t = StrType(val=from_topic)
             arg.value.Pack(t)
-            args.extend([arg])
+            offsetArg = Argument(key=ARG_OFFSET)
+            o = IntType(val=offset)
+            offsetArg.value.Pack(o)
+            args.extend([arg, offsetArg])
             return args
 
         def _toDict(args):
@@ -434,7 +449,7 @@ class IKafkaMessagingProxy(object):
             val = m.value()
             # val = m.message.value
             # print m.topic
-
+            offset = m.offset()
             # Go over customized callbacks first
             m_topic = m.topic()
             if m_topic in self.topic_callback_map:
@@ -461,7 +476,7 @@ class IKafkaMessagingProxy(object):
                 if targetted_topic in self.topic_target_cls_map and self._to_string(msg_body.rpc) in dir(self.topic_target_cls_map[targetted_topic]):
                     # Augment the request arguments with the from_topic
                     augmented_args = _augment_args_with_FromTopic(msg_body.args,
-                                                        msg_body.reply_to_topic)
+                                                        msg_body.reply_to_topic, offset)
                     call = getattr(
                             self.topic_target_cls_map[targetted_topic],
                             self._to_string(msg_body.rpc))

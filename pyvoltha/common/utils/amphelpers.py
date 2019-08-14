@@ -14,10 +14,14 @@ from zope.interface import implementer
 from pyvoltha.adapters.kafka.adapter_request_facade import InterAdapterRequestFacade
 from pyvoltha.adapters.kafka.kafka_inter_container_library import IKafkaMessagingProxy, \
     get_messaging_proxy
-
+import time
 from copy import deepcopy
+from twisted.internet.defer import setDebugging
+setDebugging(True)
 import sys
+import os
 sys.path.insert(0, "/voltha/")
+
 
 from adapters.brcm_openomci_onu.brcm_openomci_onu_handler import BrcmOpenomciOnuHandler
 from adapters.brcm_openomci_onu.omci.brcm_capabilities_task import BrcmCapabilitiesTask
@@ -34,10 +38,21 @@ class OMCIAdapter:
         self.broadcom_omci = broadcom_omci
 
 class BrcmAdapterShim:
-    def __init__(self, core_proxy, adapter_proxy, omci_agent):
+    def __init__(self, core_proxy, adapter_proxy, omci_agent, broadcom_omci):
         self.core_proxy = core_proxy
         self.adapter_proxy = adapter_proxy
         self.omci_agent = omci_agent
+        self.broadcom_omci = broadcom_omci
+
+    def custom_me_entities(self):
+        return None
+
+    def start(self):
+        log.debug('starting')
+        self.omci_agent.start()
+        log.info('started')
+
+
 
 @implementer(IComponent)
 class MainShim:
@@ -87,61 +102,78 @@ class OMCIDevice(child.AMPChild):
     def activate(self, device, adapter):
         import structlog
         #from adapters.brcm_openomci_onu.brcm_openomci_onu import *
+        #from twisted.python import log as logtwisted
+        #logtwisted.startLogging(sys.stdout)
+
         self.log = structlog.get_logger()
         self.log.info("entering-activate-process")
         self.device = device
+        self.activated = False
         main_shim = MainShim(adapter.process_parameters["args"])
         registry.register('main', main_shim)
-
+        
         reactor.callLater(0, self.initAndActivate, device, adapter)
+        #self.initAndActivate(device, adapter)
         return {"success": 1}
 
     @inlineCallbacks
     def initAndActivate(self, device, adapter):
         self.log = structlog.get_logger()
-        self.log.debug("initializing-handler")
-        self.broadcom_omci = deepcopy(OpenOmciAgentDefaults)
+        #from adapters.brcm_openomci_onu.brcm_openomci_onu import *
+        #from twisted.python import log as logtwisted
+        #logtwisted.startLogging(sys.stdout)
 
-        self.broadcom_omci['mib-synchronizer']['state-machine'] = BrcmMibSynchronizer
-        self.broadcom_omci['mib-synchronizer']['database'] = MibDbExternal
-        self.broadcom_omci['omci-capabilities']['tasks']['get-capabilities'] = BrcmCapabilitiesTask 
+        try: 
+            self.log.debug("initializing-handler")
+            self.broadcom_omci = deepcopy(OpenOmciAgentDefaults)
+            
+            self.broadcom_omci['mib-synchronizer']['state-machine'] = BrcmMibSynchronizer
+            self.broadcom_omci['mib-synchronizer']['database'] = MibDbExternal
+            self.broadcom_omci['omci-capabilities']['tasks']['get-capabilities'] = BrcmCapabilitiesTask 
 
-        self.core_proxy = CoreProxy(
-                kafka_proxy=None,
-                default_core_topic=adapter.process_parameters["core_topic"],
-                my_listening_topic=adapter.process_parameters["listening_topic"])
+            self.core_proxy = CoreProxy(
+                    kafka_proxy=None,
+                    default_core_topic=adapter.process_parameters["core_topic"],
+                    my_listening_topic=adapter.process_parameters["listening_topic"])
 
-        self.adapter_proxy = AdapterProxy(
-                kafka_proxy=None,
-                core_topic=adapter.process_parameters["core_topic"],
-                my_listening_topic=adapter.process_parameters["listening_topic"])
+            self.adapter_proxy = AdapterProxy(
+                    kafka_proxy=None,
+                    core_topic=adapter.process_parameters["core_topic"],
+                    my_listening_topic=adapter.process_parameters["listening_topic"])
 
-        openonu_request_handler = InterAdapterRequestFacade(adapter=self,
-                                                           core_proxy=self.core_proxy)
-        self.log.debug("starting-kafka-client")
-        yield registry.register(
-                'kafka_adapter_proxy',
-                IKafkaMessagingProxy(
-                    kafka_host_port=adapter.process_parameters["args"].kafka_adapter,
-                    # TODO: Add KV Store object reference
-                    kv_store=adapter.process_parameters["args"].backend,
-                    default_topic=adapter.process_parameters["args"].name,
-                    group_id_prefix=adapter.process_parameters["args"].instance_id,
-                    target_cls=openonu_request_handler
-                )
-            ).start()
+            openonu_request_handler = InterAdapterRequestFacade(adapter=self,
+                                                               core_proxy=self.core_proxy)
+            self.log.debug("starting-kafka-client")
+            #self.log.debug(os.getpid()+ " pid")
+            #self.log.debug(adapter.process_parameters["args"].instance_id)
+            yield registry.register(
+                    'kafka_adapter_proxy',
+                    IKafkaMessagingProxy(
+                        kafka_host_port=adapter.process_parameters["args"].kafka_adapter,
+                        # TODO: Add KV Store object reference
+                        kv_store=adapter.process_parameters["args"].backend,
+                        default_topic=adapter.process_parameters["args"].name,
+                        group_id_prefix=adapter.process_parameters["args"].instance_id+str(os.getpid()),
+                        target_cls=openonu_request_handler,
+                        manual_offset=long(adapter.process_parameters["offset"])
+                    )
+                ).start()
 
-        self.core_proxy.kafka_proxy = get_messaging_proxy()
-        self.adapter_proxy.kafka_proxy = get_messaging_proxy()
+            self.core_proxy.kafka_proxy = get_messaging_proxy()
+            self.adapter_proxy.kafka_proxy = get_messaging_proxy()
 
-        self.log.debug("initializing-omci-agent")
-        self.omci_agent = OpenOMCIAgent(self.core_proxy,
-                                             self.adapter_proxy,
-                                             support_classes=self.broadcom_omci)
-        adapterShim = BrcmAdapterShim(self.core_proxy, self.adapter_proxy, self.omci_agent) 
-        self.handler = BrcmOpenomciOnuHandler(adapterShim, device.id)
-        self.handler.activate(device)
-
+            self.log.debug("initializing-omci-agent")
+            self.omci_agent = OpenOMCIAgent(self.core_proxy,
+                                                 self.adapter_proxy,
+                                                 support_classes=self.broadcom_omci)
+            adapterShim = BrcmAdapterShim(self.core_proxy, self.adapter_proxy, self.omci_agent,self.broadcom_omci) 
+            adapterShim.start()
+            self.handler = BrcmOpenomciOnuHandler(adapterShim, device.id)
+            yield self.handler.activate(device)
+            self.log.debug("finished-activating")
+            self.activated = True
+        except Exception as err:
+            self.log.error("Exception:", err=err)
 #    @ProcessMessage.responder
 #   def processMessage(self, msg):
 #        import os
@@ -157,8 +189,13 @@ class OMCIDevice(child.AMPChild):
             self.log = structlog.get_logger()
             self.log.debug('process-inter-adapter-message', msg=msg)
             # Unpack the header to know which device needs to handle this message
+            if not self.activated:
+                self.log.debug("process-inter-adapter-message-yield-until-activated")
+                reactor.callLater(2, self.process_inter_adapter_message, msg)
+                return msg
             if msg.header:
                 if self.device.id == msg.header.to_device_id:
                     self.handler.process_inter_adapter_message(msg)
         except Exception as err:
-            self.log.error(err)
+            self.log.error("Exception:", err=err)
+

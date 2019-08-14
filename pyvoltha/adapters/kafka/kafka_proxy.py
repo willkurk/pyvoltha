@@ -190,7 +190,7 @@ class KafkaProxy(object):
                 log.debug("exception-receiving-msg", topic=topic, e=e)
 
     @inlineCallbacks
-    def subscribe(self, topic, callback, groupId, offset='latest'):
+    def subscribe(self, topic, callback, groupId, offset='latest', manual_offset=None):
         """
         subscribe allows a caller to subscribe to a given kafka topic.  This API
         always create a group consumer.
@@ -204,6 +204,12 @@ class KafkaProxy(object):
         :param offset:  the kafka offset from where the consumer will start
         consuming messages
         """
+        def reset_offsets(consumer, partitions):
+            consumer.assign(partitions)
+            for part in partitions:
+                part.offset = manual_offset
+            consumer.commit(offsets=partitions, async=False)
+
         try:
             self.topic_any_map_lock.acquire()
             if topic in self.topic_consumer_map:
@@ -220,7 +226,10 @@ class KafkaProxy(object):
                 'group.id': groupId,
                 'auto.offset.reset': offset
             })
-            yield deferToThread(c.subscribe, [topic])
+            if manual_offset is None:
+                yield deferToThread(c.subscribe, [topic])
+            else:
+                yield deferToThread(c.subscribe, [topic], on_assign=reset_offsets)
             # c.subscribe([topic])
             self.topic_consumer_map[topic] = c
             self.topic_callbacks_map[topic] = [callback]

@@ -106,11 +106,11 @@ class IAdapter(object):
                   port_no=port_no)
         return ofp_port_info
 
-    def adopt_device(self, device):
+    def adopt_device(self, device, offset):
         log.debug('adopt_device', device_id=device.id)
         self.devices_handlers[device.id] = self.device_handler_class(self,
                                                                      device.id)
-        reactor.callLater(0, self.devices_handlers[device.id].activate, device)
+        reactor.callLater(0, self.devices_handlers[device.id].activate, device, offset)
         log.debug('adopt_device_done', device_id=device.id)
         return device
 
