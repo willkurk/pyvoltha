@@ -482,12 +482,12 @@ class IKafkaMessagingProxy(object):
                             self._to_string(msg_body.rpc))
                     if augmented_args:
                         log.debug("message-body-args-present", body=msg_body)
-                        (status, res) = yield call(**_toDict(augmented_args))
+                        (status, res, consumed) = yield call(**_toDict(augmented_args))
                     else:
                         log.debug("message-body-args-absent", body=msg_body,
                                   rpc=msg_body.rpc)
-                        (status, res) = yield call()
-                    if msg_body.response_required:
+                        (status, res, consumed) = yield call()
+                    if msg_body.response_required and consumed:
                         response = self._format_response(
                             msg_header=message.header,
                             msg_body=res,

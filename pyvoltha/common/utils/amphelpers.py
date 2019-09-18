@@ -16,8 +16,6 @@ from pyvoltha.adapters.kafka.kafka_inter_container_library import IKafkaMessagin
     get_messaging_proxy
 import time
 from copy import deepcopy
-from twisted.internet.defer import setDebugging
-setDebugging(True)
 import sys
 import os
 sys.path.insert(0, "/voltha/")
@@ -38,11 +36,13 @@ class OMCIAdapter:
         self.broadcom_omci = broadcom_omci
 
 class BrcmAdapterShim:
-    def __init__(self, core_proxy, adapter_proxy, omci_agent, broadcom_omci):
+    def __init__(self, device, core_proxy, adapter_proxy, omci_agent, broadcom_omci, event_bus):
+        self.device = device
         self.core_proxy = core_proxy
         self.adapter_proxy = adapter_proxy
         self.omci_agent = omci_agent
         self.broadcom_omci = broadcom_omci
+        self.event_bus = event_bus
 
     def custom_me_entities(self):
         return None
@@ -52,7 +52,8 @@ class BrcmAdapterShim:
         self.omci_agent.start()
         log.info('started')
 
-
+    def mibSyncComplete(self):
+        self.event_bus.mibSyncComplete(self.device)
 
 @implementer(IComponent)
 class MainShim:
@@ -98,6 +99,12 @@ class Activate(amp.Command):
     response = [("success", amp.Integer())]
 
 class OMCIDevice(child.AMPChild):
+    handler = {}
+    activated = {}
+    init_state = "init"
+    max_devices = 8
+    device_queue = []
+    devices_processing = {}
     @Activate.responder
     def activate(self, device, adapter):
         import structlog
@@ -107,13 +114,14 @@ class OMCIDevice(child.AMPChild):
 
         self.log = structlog.get_logger()
         self.log.info("entering-activate-process")
-        self.device = device
-        self.activated = False
-        main_shim = MainShim(adapter.process_parameters["args"])
-        registry.register('main', main_shim)
+        self.activated[device.id] = False
         
-        reactor.callLater(0, self.initAndActivate, device, adapter)
-        #self.initAndActivate(device, adapter)
+        if len(self.devices_processing.keys()) >= self.max_devices:
+            self.device_queue.append((device,adapter))
+        else:
+            reactor.callLater(0, self.initAndActivate, device, adapter)
+            self.devices_processing[device.id] = device
+            #self.initAndActivate(device, adapter)
         return {"success": 1}
 
     @inlineCallbacks
@@ -124,29 +132,35 @@ class OMCIDevice(child.AMPChild):
         #logtwisted.startLogging(sys.stdout)
 
         try: 
-            self.log.debug("initializing-handler")
-            self.broadcom_omci = deepcopy(OpenOmciAgentDefaults)
+            if self.init_state == "init":
+                self.init_state = "initializing"
+                self.log.debug("initializing-handler")
+                
+                main_shim = MainShim(adapter.process_parameters["args"])
+                registry.register('main', main_shim)
+        
+                self.broadcom_omci = deepcopy(OpenOmciAgentDefaults)
             
-            self.broadcom_omci['mib-synchronizer']['state-machine'] = BrcmMibSynchronizer
-            self.broadcom_omci['mib-synchronizer']['database'] = MibDbExternal
-            self.broadcom_omci['omci-capabilities']['tasks']['get-capabilities'] = BrcmCapabilitiesTask 
+                self.broadcom_omci['mib-synchronizer']['state-machine'] = BrcmMibSynchronizer
+                self.broadcom_omci['mib-synchronizer']['database'] = MibDbExternal
+                self.broadcom_omci['omci-capabilities']['tasks']['get-capabilities'] = BrcmCapabilitiesTask 
 
-            self.core_proxy = CoreProxy(
+                self.core_proxy = CoreProxy(
                     kafka_proxy=None,
                     default_core_topic=adapter.process_parameters["core_topic"],
                     my_listening_topic=adapter.process_parameters["listening_topic"])
 
-            self.adapter_proxy = AdapterProxy(
+                self.adapter_proxy = AdapterProxy(
                     kafka_proxy=None,
                     core_topic=adapter.process_parameters["core_topic"],
                     my_listening_topic=adapter.process_parameters["listening_topic"])
 
-            openonu_request_handler = InterAdapterRequestFacade(adapter=self,
+                openonu_request_handler = InterAdapterRequestFacade(adapter=self,
                                                                core_proxy=self.core_proxy)
-            self.log.debug("starting-kafka-client")
+                self.log.debug("starting-kafka-client")
             #self.log.debug(os.getpid()+ " pid")
             #self.log.debug(adapter.process_parameters["args"].instance_id)
-            yield registry.register(
+                yield registry.register(
                     'kafka_adapter_proxy',
                     IKafkaMessagingProxy(
                         kafka_host_port=adapter.process_parameters["args"].kafka_adapter,
@@ -159,19 +173,26 @@ class OMCIDevice(child.AMPChild):
                     )
                 ).start()
 
-            self.core_proxy.kafka_proxy = get_messaging_proxy()
-            self.adapter_proxy.kafka_proxy = get_messaging_proxy()
+                self.core_proxy.kafka_proxy = get_messaging_proxy()
+                self.adapter_proxy.kafka_proxy = get_messaging_proxy()
 
-            self.log.debug("initializing-omci-agent")
-            self.omci_agent = OpenOMCIAgent(self.core_proxy,
+                self.log.debug("initializing-omci-agent")
+                self.omci_agent = OpenOMCIAgent(self.core_proxy,
                                                  self.adapter_proxy,
-                                                 support_classes=self.broadcom_omci)
-            adapterShim = BrcmAdapterShim(self.core_proxy, self.adapter_proxy, self.omci_agent,self.broadcom_omci) 
-            adapterShim.start()
-            self.handler = BrcmOpenomciOnuHandler(adapterShim, device.id)
-            yield self.handler.activate(device)
+                                                     support_classes=self.broadcom_omci)
+                self.adapterShim = BrcmAdapterShim(device,self.core_proxy, self.adapter_proxy, self.omci_agent,self.broadcom_omci, self) 
+                self.adapterShim.start()
+
+                self.init_state = "done"
+            elif self.init_state == "initializing":
+                self.log.debug("initialization-in-progress")
+                reactor.callLater(1, self.initAndActivate, device, adapter)
+                return
+
+            self.handler[device.id] = BrcmOpenomciOnuHandler(self.adapterShim, device.id)
+            yield self.handler[device.id].activate(device)
             self.log.debug("finished-activating")
-            self.activated = True
+            self.activated[device.id] = True
         except Exception as err:
             self.log.error("Exception:", err=err)
 #    @ProcessMessage.responder
@@ -185,8 +206,8 @@ class OMCIDevice(child.AMPChild):
 #        return {"success": 1}
     def get_ofp_port_info(self, device, port_no):
         try:
-            if device.id == self.device.id:
-                ofp_port_info = self.handler.get_ofp_port_info(device, port_no)
+            if device.id in self.handler.keys():
+                ofp_port_info = self.handler[device.id].get_ofp_port_info(device, port_no)
                 log.debug('get_ofp_port_info', device_id=device.id, ofp_port_info=ofp_port_info)
                 return ofp_port_info
         except Exception as err:
@@ -197,13 +218,17 @@ class OMCIDevice(child.AMPChild):
             self.log = structlog.get_logger()
             self.log.debug('process-inter-adapter-message', msg=msg)
             # Unpack the header to know which device needs to handle this message
-            if not self.activated:
-                self.log.debug("process-inter-adapter-message-yield-until-activated")
-                reactor.callLater(2, self.process_inter_adapter_message, msg)
-                return msg
             if msg.header:
-                if self.device.id == msg.header.to_device_id:
-                    self.handler.process_inter_adapter_message(msg)
+                if msg.header.to_device_id in self.handler.keys():
+                    if not self.activated[msg.header.to_device_id]:
+                        self.log.debug("process-inter-adapter-message-yield-until-activated")
+                        reactor.callLater(2, self.process_inter_adapter_message, msg)
+                        return None, False 
+            if msg.header:
+                if msg.header.to_device_id in self.handler.keys():
+                    self.handler[msg.header.to_device_id].process_inter_adapter_message(msg)
+                    return None, True
+            return None, False
         except Exception as err:
             self.log.error("Exception:", err=err)
 
@@ -214,12 +239,19 @@ class OMCIDevice(child.AMPChild):
         '''
         try:
             assert len(groups.items) == 0
-            if device.id == self.device.id:
-                return self.handler.update_flow_table(device, flows.items)
+            if device.id in self.handler.keys():
+                return self.handler[device.id].update_flow_table(device, flows.items)
         except Exception as err:
             self.log.error("Exception:", err=err)
 
     def update_flows_incrementally(self, device, flow_changes, group_changes):
         raise NotImplementedError()
 
+    def mibSyncComplete(self, doneDevice):
+        if doneDevice.id in self.devices_processing.keys():
+            del self.devices_processing[doneDevice.id]
+            if len(self.devices_processing.keys()) < self.max_devices:
+                (device, adapter) = self.device_queue.pop(0)
+                reactor.callLater(0, self.initAndActivate, device, adapter)
+                self.devices_processing[device.id] = device
 

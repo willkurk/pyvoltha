@@ -100,19 +100,19 @@ class AdapterRequestFacade(object):
             result = self.adapter.adopt_device(d, offset.val)
             # return True, self.adapter.adopt_device(d)
 
-            return True, result
+            return True, result, True
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid")
+                                reason="device-invalid"), True
 
     def get_ofp_device_info(self, device, **kwargs):
         d = Device()
         if device:
             device.Unpack(d)
-            return True, self.adapter.get_ofp_device_info(d)
+            return True, self.adapter.get_ofp_device_info(d), True
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid")
+                                reason="device-invalid"), True
 
     def reconcile_device(self, device, **kwargs):
         return self.adapter.reconcile_device(device)
@@ -124,28 +124,28 @@ class AdapterRequestFacade(object):
         d = Device()
         if device:
             device.Unpack(d)
-            return True, self.adapter.disable_device(d)
+            return True, self.adapter.disable_device(d), True
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid")
+                                reason="device-invalid"), True
 
     def reenable_device(self, device, **kwargs):
         d = Device()
         if device:
             device.Unpack(d)
-            return True, self.adapter.reenable_device(d)
+            return True, self.adapter.reenable_device(d), True
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid")
+                                reason="device-invalid"), True
 
     def reboot_device(self, device, **kwargs):
         d = Device()
         if device:
             device.Unpack(d)
-            return (True, self.adapter.reboot_device(d))
+            return (True, self.adapter.reboot_device(d)), True
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid")
+                                reason="device-invalid"), True
 
     def download_image(self, device, request, **kwargs):
         d = Device()
@@ -265,23 +265,23 @@ class AdapterRequestFacade(object):
                 deviceId.Unpack(d_id)
             else:
                 return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                    reason="deviceid-invalid")
+                                    reason="deviceid-invalid"), True
 
             op = IntType()
             if outPort:
                 outPort.Unpack(op)
             else:
                 return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                    reason="outport-invalid")
+                                    reason="outport-invalid"), True
 
             p = ofp_packet_out()
             if packet:
                 packet.Unpack(p)
             else:
                 return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                    reason="packet-invalid")
+                                    reason="packet-invalid"), True
 
-            return (True, self.adapter.receive_packet_out(d_id.val, op.val, p))
+            return (True, self.adapter.receive_packet_out(d_id.val, op.val, p)), True
         except Exception as e:
             log.exception("error-processing-receive_packet_out", e=e)
             
@@ -331,9 +331,9 @@ class InterAdapterRequestFacade(object):
             msg.Unpack(m)
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="msg-invalid")
-
-        return (True, self.adapter.process_inter_adapter_message(m))
+                                reason="msg-invalid"), True
+        result, consumed = self.adapter.process_inter_adapter_message(m)
+        return (True, result, consumed)
 
     def get_ofp_port_info(self, device, port_no, **kwargs):
         d = Device()
@@ -341,15 +341,15 @@ class InterAdapterRequestFacade(object):
             device.Unpack(d)
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid")
+                                reason="device-invalid"), True
         p = IntType()
         if port_no:
             port_no.Unpack(p)
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="port-no-invalid")
+                                reason="port-no-invalid"), True
 
-        return True, self.adapter.get_ofp_port_info(d, p.val)
+        return True, self.adapter.get_ofp_port_info(d, p.val), True
 
     def update_flows_bulk(self, device, flows, groups, **kwargs):
         d = Device()
@@ -357,7 +357,7 @@ class InterAdapterRequestFacade(object):
             device.Unpack(d)
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid")
+                                reason="device-invalid"), True
         f = Flows()
         if flows:
             flows.Unpack(f)
@@ -366,7 +366,7 @@ class InterAdapterRequestFacade(object):
         if groups:
             groups.Unpack(g)
 
-        return (True, self.adapter.update_flows_bulk(d, f, g))
+        return (True, self.adapter.update_flows_bulk(d, f, g), True)
 
     def update_flows_incrementally(self, device, flow_changes, group_changes, **kwargs):
         d = Device()
@@ -374,7 +374,7 @@ class InterAdapterRequestFacade(object):
             device.Unpack(d)
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid")
+                                reason="device-invalid"), True
         f = FlowChanges()
         if flow_changes:
             flow_changes.Unpack(f)
@@ -383,7 +383,7 @@ class InterAdapterRequestFacade(object):
         if group_changes:
             group_changes.Unpack(g)
 
-        return (True, self.adapter.update_flows_incrementally(d, f, g))
+        return (True, self.adapter.update_flows_incrementally(d, f, g), True)
 
 
 
