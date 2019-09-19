@@ -20,7 +20,6 @@ import sys
 import os
 sys.path.insert(0, "/voltha/")
 
-
 from adapters.brcm_openomci_onu.brcm_openomci_onu_handler import BrcmOpenomciOnuHandler
 from adapters.brcm_openomci_onu.omci.brcm_capabilities_task import BrcmCapabilitiesTask
 from adapters.brcm_openomci_onu.omci.brcm_mib_sync import BrcmMibSynchronizer
@@ -36,8 +35,7 @@ class OMCIAdapter:
         self.broadcom_omci = broadcom_omci
 
 class BrcmAdapterShim:
-    def __init__(self, device, core_proxy, adapter_proxy, omci_agent, broadcom_omci, event_bus):
-        self.device = device
+    def __init__(self, core_proxy, adapter_proxy, omci_agent, broadcom_omci, event_bus):
         self.core_proxy = core_proxy
         self.adapter_proxy = adapter_proxy
         self.omci_agent = omci_agent
@@ -52,9 +50,10 @@ class BrcmAdapterShim:
         self.omci_agent.start()
         log.info('started')
 
-    def mibSyncComplete(self):
-        self.event_bus.mibSyncComplete(self.device)
-
+    def mibSyncComplete(self, device):
+        log.debug("mib-sync-complete-sending")
+        self.event_bus.mibSyncComplete(device)
+        
 @implementer(IComponent)
 class MainShim:
     def __init__(self, args):
@@ -111,11 +110,11 @@ class OMCIDevice(child.AMPChild):
         #from adapters.brcm_openomci_onu.brcm_openomci_onu import *
         #from twisted.python import log as logtwisted
         #logtwisted.startLogging(sys.stdout)
-
+        
         self.log = structlog.get_logger()
         self.log.info("entering-activate-process")
         self.activated[device.id] = False
-        
+         
         if len(self.devices_processing.keys()) >= self.max_devices:
             self.device_queue.append((device,adapter))
         else:
@@ -130,6 +129,10 @@ class OMCIDevice(child.AMPChild):
         #from adapters.brcm_openomci_onu.brcm_openomci_onu import *
         #from twisted.python import log as logtwisted
         #logtwisted.startLogging(sys.stdout)
+        #import os
+        #ptvsd.enable_attach(address=('10.64.1.131', 3000+os.getpid()), redirect_output=True)
+        #self.log.debug("debugger port :" + str(3000+os.getpid()))
+        #ptvsd.wait_for_attach()
 
         try: 
             if self.init_state == "init":
@@ -148,6 +151,7 @@ class OMCIDevice(child.AMPChild):
                 self.core_proxy = CoreProxy(
                     kafka_proxy=None,
                     default_core_topic=adapter.process_parameters["core_topic"],
+                    default_event_topic=adapter.process_parameters["event_topic"],
                     my_listening_topic=adapter.process_parameters["listening_topic"])
 
                 self.adapter_proxy = AdapterProxy(
@@ -180,7 +184,7 @@ class OMCIDevice(child.AMPChild):
                 self.omci_agent = OpenOMCIAgent(self.core_proxy,
                                                  self.adapter_proxy,
                                                      support_classes=self.broadcom_omci)
-                self.adapterShim = BrcmAdapterShim(device,self.core_proxy, self.adapter_proxy, self.omci_agent,self.broadcom_omci, self) 
+                self.adapterShim = BrcmAdapterShim(self.core_proxy, self.adapter_proxy, self.omci_agent,self.broadcom_omci, self) 
                 self.adapterShim.start()
 
                 self.init_state = "done"
@@ -219,7 +223,7 @@ class OMCIDevice(child.AMPChild):
             self.log.debug('process-inter-adapter-message', msg=msg)
             # Unpack the header to know which device needs to handle this message
             if msg.header:
-                if msg.header.to_device_id in self.handler.keys():
+                if msg.header.to_device_id in self.activated.keys():
                     if not self.activated[msg.header.to_device_id]:
                         self.log.debug("process-inter-adapter-message-yield-until-activated")
                         reactor.callLater(2, self.process_inter_adapter_message, msg)
@@ -248,10 +252,14 @@ class OMCIDevice(child.AMPChild):
         raise NotImplementedError()
 
     def mibSyncComplete(self, doneDevice):
+        self.log.debug("checking-processing-devices", doneDevice=doneDevice)
         if doneDevice.id in self.devices_processing.keys():
+            self.log.debug("in list")
             del self.devices_processing[doneDevice.id]
             if len(self.devices_processing.keys()) < self.max_devices:
                 (device, adapter) = self.device_queue.pop(0)
+                self.log.debug("new device", device=device)
                 reactor.callLater(0, self.initAndActivate, device, adapter)
                 self.devices_processing[device.id] = device
+                self.log.debug("called activate")
 
