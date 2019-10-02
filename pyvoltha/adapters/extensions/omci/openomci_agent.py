@@ -70,7 +70,8 @@ OpenOmciAgentDefaults = {
     },
     'alarm-synchronizer': {
         'state-machine': AlarmSynchronizer,    # Implements the Alarm sync state machine
-        'database': AlarmDbExternal,           # For any State storage needs
+        'database': MibDbVolatileDict,           # For any State storage needs
+
         'advertise-events': True,              # Advertise events on OpenOMCI event bus
         'tasks': {
             'alarm-resync': AlarmResyncTask

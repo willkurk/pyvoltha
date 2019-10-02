@@ -126,6 +126,8 @@ class ContainerProxy(object):
                 returnValue(res)
             except TimeOutError as e:
                 log.warn('invoke-timeout', e=e)
+                if "msg" in kwargs.keys():
+                    log.debug("invoke-timeout-msg", msg=kwargs["msg"])
                 if retry == max_retry:
                     raise e
                 retry += 1

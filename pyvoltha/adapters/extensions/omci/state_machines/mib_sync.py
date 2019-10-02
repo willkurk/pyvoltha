@@ -678,6 +678,7 @@ class MibSynchronizer(object):
 
                     # Save to the database
                     self._database.set(self._device_id, class_id, entity_id, attributes)
+                    self.log.debug('set-complete')
 
             except KeyError:
                 pass            # NOP

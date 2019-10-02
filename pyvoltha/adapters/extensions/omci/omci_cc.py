@@ -31,7 +31,7 @@ from pyvoltha.common.event_bus import EventBusClient
 from voltha_protos.inter_container_pb2 import InterAdapterMessageType, InterAdapterOmciMessage
 from enum import IntEnum
 from binascii import hexlify
-
+import traceback
 
 def hexify(buffer):
     """Return a hexadecimal string encoding of input buffer"""
@@ -786,6 +786,7 @@ class OMCI_CC(object):
         if self._tx_request[index] is None:  # TODO or self._tx_request[index][OMCI_CC.REQUEST_DEFERRED].called:
             d = None
             try:
+                self.log.debug("Debug 1")
                 if len(self._pending[index]) and \
                         not self._ok_to_send(self._pending[index][0][OMCI_CC.PENDING_FRAME],
                                              high_priority):
@@ -793,7 +794,7 @@ class OMCI_CC(object):
                     return
 
                 next_frame = self._pending[index].pop(0)
-
+                self.log.debug("Debug 2")
                 d = next_frame[OMCI_CC.PENDING_DEFERRED]
                 frame = next_frame[OMCI_CC.PENDING_FRAME]
                 timeout = next_frame[OMCI_CC.PENDING_TIMEOUT]
@@ -807,7 +808,7 @@ class OMCI_CC(object):
                 #       restore it later. Tried other ways but really made the code messy.
                 saved_me_map = omci_entities.entity_id_to_class_map
                 omci_entities.entity_id_to_class_map = self._me_map
-
+                self.log.debug("Debug 3")
                 ts = arrow.utcnow().float_timestamp
                 try:
                     self._rx_response[index] = None
@@ -828,19 +829,18 @@ class OMCI_CC(object):
 
                     # (timestamp, defer, frame, timeout, retry, delayedCall)
                     self._tx_request[index] = (ts, d, frame, timeout, retry, dc)
-
+                    self.log.debug("Debug 4")
                     if timeout > 0:
                         d.addCallbacks(self._request_success, self._request_failure,
                                        callbackArgs=(high_priority,),
                                        errbackArgs=(tx_tid, high_priority))
-
+                    self.log.debug("Debug 5")
                     omci_msg = InterAdapterOmciMessage(
                         message=hexify(str(frame)),
                         proxy_address=self._proxy_address,
                         connect_status=self._device.connect_status)
 
                     self.log.debug('inter-adapter-send-omci', tid=tx_tid, omci_msg=omci_msg.message)
-
                     yield self._adapter_proxy.send_inter_adapter_message(
                         msg=omci_msg,
                         type=InterAdapterMessageType.OMCI_REQUEST,
@@ -850,6 +850,7 @@ class OMCI_CC(object):
                         proxy_device_id=self._proxy_address.device_id
                     )
                     self.log.debug('done-inter-adapter-send-message', tx_tid=tx_tid)
+                    self.log.debug("Debug 6")
                 finally:
                     omci_entities.entity_id_to_class_map = saved_me_map
 
@@ -858,6 +859,7 @@ class OMCI_CC(object):
 
             except Exception as e:
                 self.log.exception('send-proxy-exception', e=e)
+                self.log.error(traceback.format_exc())
                 self._tx_request[index] = None
                 self.reactor.callLater(0, self._send_next_request, high_priority)
 

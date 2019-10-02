@@ -331,7 +331,7 @@ class InterAdapterRequestFacade(object):
             msg.Unpack(m)
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="msg-invalid"), True
+                                reason="msg-invalid"), False
         result, consumed = self.adapter.process_inter_adapter_message(m)
         return (True, result, consumed)
 
@@ -341,15 +341,15 @@ class InterAdapterRequestFacade(object):
             device.Unpack(d)
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid"), True
+                                reason="device-invalid"), False
         p = IntType()
         if port_no:
             port_no.Unpack(p)
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
                                 reason="port-no-invalid"), True
-
-        return True, self.adapter.get_ofp_port_info(d, p.val), True
+        result, consumed = self.adapter.get_ofp_port_info(d, p.val)
+        return True, result, consumed
 
     def update_flows_bulk(self, device, flows, groups, **kwargs):
         d = Device()
@@ -357,7 +357,7 @@ class InterAdapterRequestFacade(object):
             device.Unpack(d)
         else:
             return False, Error(code=ErrorCode.INVALID_PARAMETERS,
-                                reason="device-invalid"), True
+                                reason="device-invalid"), False
         f = Flows()
         if flows:
             flows.Unpack(f)
@@ -365,8 +365,8 @@ class InterAdapterRequestFacade(object):
         g = FlowGroups()
         if groups:
             groups.Unpack(g)
-
-        return (True, self.adapter.update_flows_bulk(d, f, g), True)
+        result, consumed = self.adapter.update_flows_bulk(d, f, g)
+        return (True, result, consumed)
 
     def update_flows_incrementally(self, device, flow_changes, group_changes, **kwargs):
         d = Device()
